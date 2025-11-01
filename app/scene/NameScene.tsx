@@ -27,6 +27,9 @@ const joystickState = {
   right: 0,
 };
 
+// Flag to ensure camera animation runs only once per page load
+let animationCompleted = false;
+
 export default function NameScene({ name = process.env.NEXT_PUBLIC_DISPLAY_NAME || "JEZREL DAVE" }: Props) {
   const keyboardMap = useMemo<KeyboardControlsEntry<Controls>[]>
     (() => [
@@ -117,14 +120,14 @@ export default function NameScene({ name = process.env.NEXT_PUBLIC_DISPLAY_NAME 
     const animationRef = useRef({ progress: 0, enabled: true });
 
     useFrame((state, delta) => {
-      if (!animationRef.current.enabled) return;
+      if (!animationRef.current.enabled || animationCompleted) return;
 
       animationRef.current.progress += delta * 0.1; // Adjust speed here
       const progress = Math.min(animationRef.current.progress, 1);
 
       // Start position: top view [0, 20, 0]
       // End position: [8, 5, 10]
-      const startPos = [0, 30, 0];
+      const startPos = [10, 30, 10];
       const endPos = [10, 5, 10];
 
       // Interpolate position
@@ -143,6 +146,7 @@ export default function NameScene({ name = process.env.NEXT_PUBLIC_DISPLAY_NAME 
       if (progress >= 1) {
         setAnimationComplete(true);
         animationRef.current.enabled = false;
+        animationCompleted = true;
       }
     });
 

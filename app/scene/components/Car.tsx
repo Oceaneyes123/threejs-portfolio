@@ -7,7 +7,7 @@ import * as THREE from "three";
 type Controls = "forward" | "backward" | "left" | "right";
 
 function Car() {
-  const { scene } = useGLTF("/assets/car3.glb");
+  const { scene } = useGLTF("/assets/car2.glb");
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const carRef = useRef<any>(null); // RigidBody imperative API
   const [, get] = useKeyboardControls<Controls>();
@@ -16,10 +16,15 @@ function Car() {
     if (!carRef.current) return;
     const { forward, backward, left, right } = get();
 
-    // Get current velocity
-    const currentVelocity = carRef.current.linvel();
-    const velocityVector = new THREE.Vector3(currentVelocity.x, currentVelocity.y, currentVelocity.z);
-    const currentSpeed = velocityVector.length();
+  // Get current velocity
+  const currentVelocity = carRef.current.linvel();
+  // Raw velocity includes vertical component
+  const rawVelocityVector = new THREE.Vector3(currentVelocity.x, currentVelocity.y, currentVelocity.z);
+  // Use horizontal velocity for speed/turning calculations to avoid vertical "flying" affecting control
+  const velocityVector = rawVelocityVector.clone();
+  velocityVector.y = 0;
+  const currentSpeed = velocityVector.length();
+  const verticalSpeed = rawVelocityVector.y;
 
     // Get car's forward direction (based on rotation)
     const quaternion = carRef.current.rotation();
@@ -28,20 +33,20 @@ function Car() {
     carDirection.y = 0; // Keep movement on horizontal plane
     carDirection.normalize();
 
-    // Calculate velocity direction relative to car facing
-    const velocityDirection = velocityVector.clone().normalize();
+  // Calculate velocity direction relative to car facing (only horizontal)
+  const velocityDirection = currentSpeed > 1e-3 ? velocityVector.clone().normalize() : new THREE.Vector3();
     const dotProduct = carDirection.dot(velocityDirection);
     const isMovingForward = dotProduct > 0;
 
     // Physics constants
-    const maxSpeed = 15;
-    const acceleration = 2.5;
-    const brakeForce = 4.0; // Stronger braking when opposite direction
-    const naturalDeceleration = 1.2; // Slower deceleration when no input
-    const turnSpeed = 0.04;
-    const minTurnSpeed = 0.5; // Minimum speed required for turning
+    const maxSpeed = 3;
+    const acceleration = 4.0;
+    const brakeForce = 2.0; // Stronger braking when opposite direction
+    const naturalDeceleration = 1.5; // Slower deceleration when no input
+    const turnSpeed = 0.05;
+    const minTurnSpeed = 0.2; // Minimum speed required for turning
 
-    const force = new THREE.Vector3();
+  const force = new THREE.Vector3();
 
     // Forward/Backward movement
     if (forward) {
@@ -74,14 +79,46 @@ function Car() {
       }
     }
 
-    // Apply movement force
+  // Determine airborne state (simple check using height and vertical speed)
+  const carPos = carRef.current.translation();
+  const isAirborne = carPos.y > 0.6 || Math.abs(verticalSpeed) > 1.0;
+
+    // Reduce control while airborne to prevent weird mid-air inputs
+    const airControlFactor = isAirborne ? 0.12 : 1.0;
+
+    // Ensure we don't apply vertical component from control forces
+    force.y = 0;
+
+    // Apply movement force (scaled by air control)
     if (force.length() > 0) {
-      carRef.current.addForce({ x: force.x, y: force.y, z: force.z }, true);
+      const applied = force.clone().multiplyScalar(airControlFactor);
+      carRef.current.addForce({ x: applied.x, y: 0, z: applied.z }, true);
     }
 
-    // Turning - only works when car has some speed
+    // Velocity clamping to prevent excessive speed (helps with flying)
+    const maxHorizontalVel = maxSpeed * 1.5; // horizontal cap
+    const maxUpVel = 6; // upward velocity cap
+    const maxDownVel = -12; // downward velocity cap
+
+    const horizVel = new THREE.Vector3(currentVelocity.x, 0, currentVelocity.z);
+    let clampedX = currentVelocity.x;
+    let clampedZ = currentVelocity.z;
+    if (horizVel.length() > maxHorizontalVel) {
+      const clamped = horizVel.clone().normalize().multiplyScalar(maxHorizontalVel);
+      clampedX = clamped.x;
+      clampedZ = clamped.z;
+    }
+
+    const clampedY = Math.max(Math.min(currentVelocity.y, maxUpVel), maxDownVel);
+
+    // Only set linear velocity if we changed something to avoid interfering with physics too often
+    if (clampedX !== currentVelocity.x || clampedZ !== currentVelocity.z || clampedY !== currentVelocity.y) {
+      carRef.current.setLinvel({ x: clampedX, y: clampedY, z: clampedZ }, true);
+    }
+
+    // Turning - only works when car has some horizontal speed
     if (currentSpeed > minTurnSpeed) {
-      const turnRate = turnSpeed * Math.min(currentSpeed / maxSpeed, 1.0);
+      const turnRate = turnSpeed * Math.min(currentSpeed / maxSpeed, 1.0) * (isAirborne ? 0.5 : 1.0);
       
       if (left) {
         const rapierRot = carRef.current.rotation();
@@ -111,7 +148,7 @@ function Car() {
     const euler = new THREE.Euler().setFromQuaternion(currentRot, 'YXZ');
     
     // Limit tilt angles to prevent flipping
-    const maxTilt = 0.3; // radians (~17 degrees)
+    const maxTilt = 0.1; // radians (~5.7 degrees)
     euler.x = Math.max(-maxTilt, Math.min(maxTilt, euler.x));
     euler.z = Math.max(-maxTilt, Math.min(maxTilt, euler.z));
     
@@ -123,10 +160,16 @@ function Car() {
       w: stabilizedRot.w 
     }, true);
 
+    // Additional stabilization torque to prevent flipping
+    const stabilizationStrength = 25;
+    const correctionTorqueX = -euler.x * stabilizationStrength;
+    const correctionTorqueZ = -euler.z * stabilizationStrength;
+    carRef.current.addTorque({ x: correctionTorqueX, y: 0, z: correctionTorqueZ }, true);
+
     // Boundary constraints - keep car within the 50x50 plane
     const position = carRef.current.translation();
     const boundaryForce = 5.0; // Increased force for better containment
-    const boundaryDistance = 20; // Larger buffer zone
+    const boundaryDistance = 15; // Larger buffer zone
     const maxDistance = 24; // Hard limit - teleport back if exceeded
     
     const boundaryForceVector = new THREE.Vector3();
@@ -161,13 +204,14 @@ function Car() {
   return (
     <RigidBody
       ref={carRef}
-      mass={15}
-      position={[-3, 0.5, 7]}
+      type="dynamic"
+      mass={20}
+      position={[-3, 0, 7]}
       colliders="hull"
-      restitution={0.2}
-      friction={1.2}
-      linearDamping={0.8}
-      angularDamping={2.0}
+      restitution={0}
+      friction={2.0}
+      linearDamping={0.3}
+      angularDamping={3.0}
     >
       <primitive object={scene} scale={1} castShadow />
     </RigidBody>
