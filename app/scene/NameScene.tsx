@@ -11,6 +11,7 @@ import Trees from "./components/Trees";
 import Rocks from "./components/Rocks";
 import Car from "./components/Car";
 import Billboard from "./components/Billboard";
+import TextBoxes from "./components/TextBoxes";
 
 // Joystick library will be loaded dynamically on mobile inside useEffect
 
@@ -159,7 +160,7 @@ export default function NameScene({ name = process.env.NEXT_PUBLIC_DISPLAY_NAME 
       <KeyboardControls map={keyboardMap}>
         <Canvas shadows camera={{ fov: 50 }}>
           <color attach="background" args={["#ffb884"]} />
-          <SoftShadows size={42} samples={16} focus={0.8} />
+          <SoftShadows size={42} samples={16} focus={1} />
           <CameraAnimation />
           <Lights />
           <Suspense fallback={null}>
@@ -170,6 +171,12 @@ export default function NameScene({ name = process.env.NEXT_PUBLIC_DISPLAY_NAME 
               <Rocks />
               <Car />
               <Billboard position={[0, 2.2, 6]} />
+              <TextBoxes boxes={[
+                { text: "W", position: [5, 0, 7] },
+                { text: "A", position: [3, 0, 9] },
+                { text: "S", position: [5, 0, 9] },
+                { text: "D", position: [7, 0, 9] }
+              ]} />
             </Physics>
             <Environment preset="sunset" />
           </Suspense>
