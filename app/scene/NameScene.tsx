@@ -130,7 +130,7 @@ export default function NameScene({ name = process.env.NEXT_PUBLIC_DISPLAY_NAME 
       // Start position: top view [0, 20, 0]
       // End position: [8, 5, 10]
       const startPos = [10, 30, 10];
-      const endPos = [10, 5, 10];
+      const endPos = [10, 5, 13];
 
       // Interpolate position
       camera.position.x = startPos[0] + (endPos[0] - startPos[0]) * progress;

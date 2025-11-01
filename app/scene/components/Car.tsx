@@ -32,7 +32,7 @@ function Car() {
   // Car state
   const velocity = useRef(0);
   const steering = useRef(0);
-  const maxSteer = Math.PI / 6;
+  const maxSteer = Math.PI;
   const maxSpeed = 12;
   const acceleration = 18;
   const brakeDecel = 30;
@@ -85,8 +85,8 @@ function Car() {
     const pos = car.translation();
     const rot = car.rotation();
     // Update steering
-    if (input.left) steering.current = Math.max(steering.current - delta * 2, -maxSteer);
-    else if (input.right) steering.current = Math.min(steering.current + delta * 2, maxSteer);
+    if (input.left) steering.current = Math.min(steering.current + delta * 2, maxSteer);
+    else if (input.right) steering.current = Math.max(steering.current - delta * 2, -maxSteer);
     else steering.current *= 0.85;
     setFrontSteer(steering.current);
     // Acceleration/brake
@@ -112,7 +112,7 @@ function Car() {
     // Move car
     let angle = rot.y || 0;
     if (Math.abs(velocity.current) > 0.01) {
-      angle += steering.current * (velocity.current >= 0 ? 1 : -1) * delta * 1.5;
+      angle += steering.current * (velocity.current >= 0 ? 1 : -1) * delta * 2.0;
     }
     // Calculate new position
     let dx = Math.sin(angle) * velocity.current * delta;

@@ -8,7 +8,7 @@ type TextBoxProps = {
 };
 
 function TextBox({ text, position }: TextBoxProps) {
-  const boxSize = [2, 1, 2] as [number, number, number]; // width, height, depth
+  const boxSize = [1.5, 0.75, 1.5] as [number, number, number]; // width, height, depth
 
   const textTexture = useMemo(() => {
     const canvas = document.createElement("canvas");

@@ -47,7 +47,7 @@ function Letters3D({ name }: { name: string }) {
                 receiveShadow
               >
                 {ch}
-                <meshToonMaterial color="#c3c6c9" />
+                <meshToonMaterial color="#f0eded" />
               </Text3D>
             </Center>
           </RigidBody>

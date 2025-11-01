@@ -43,7 +43,7 @@ export default function Billboard({ position = [0, 2.2, 6] }: Props) {
       ctx.font = `700 ${fontSize}px Inter, Arial, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      const text = "WARNING: Flying Cars in the Area!";
+      const text = "Steering wheel not working properly"
       // Wrap text if needed (simple manual wrap)
       const maxWidth = width - 120;
       const words = text.split(" ");
