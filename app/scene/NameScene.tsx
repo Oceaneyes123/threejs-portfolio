@@ -21,14 +21,6 @@ type Props = {
 
 type Controls = "forward" | "backward" | "left" | "right";
 
-// Mobile joystick state manager
-const joystickState = {
-  forward: 0,
-  backward: 0,
-  left: 0,
-  right: 0,
-};
-
 // Flag to ensure camera animation runs only once per page load
 let animationCompleted = false;
 
@@ -42,14 +34,19 @@ export default function NameScene({ name = process.env.NEXT_PUBLIC_DISPLAY_NAME 
     ],
     [])
 
+  // Mobile joystick state manager
+  const [joystickState, setJoystickState] = useState({
+    forward: 0,
+    backward: 0,
+    left: 0,
+    right: 0,
+  });
+
   const [animationComplete, setAnimationComplete] = useState(false);
 
   useEffect(() => {
     // Only enable joystick on mobile/touch devices
-    const isMobile =
-      /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
-      ("ontouchstart" in window) ||
-      window.innerWidth <= 768;
+    const isMobile = true; // Temporarily enable on all devices for testing
 
     if (!isMobile) return;
 
@@ -94,17 +91,21 @@ export default function NameScene({ name = process.env.NEXT_PUBLIC_DISPLAY_NAME 
         const force = Math.min(dataRaw?.force ?? 0, 2) / 2; // Normalize to 0-1
 
         // Convert polar coordinates to direction
-        joystickState.forward = Math.max(0, -Math.sin(angle) * force);
-        joystickState.backward = Math.max(0, Math.sin(angle) * force);
-        joystickState.left = Math.max(0, -Math.cos(angle) * force);
-        joystickState.right = Math.max(0, Math.cos(angle) * force);
+        setJoystickState({
+          forward: Math.max(0, Math.sin(angle) * force),
+          backward: Math.max(0, -Math.sin(angle) * force),
+          right: Math.max(0, -Math.cos(angle) * force),
+          left: Math.max(0, Math.cos(angle) * force),
+        });
       });
 
       manager.on("end", () => {
-        joystickState.forward = 0;
-        joystickState.backward = 0;
-        joystickState.left = 0;
-        joystickState.right = 0;
+        setJoystickState({
+          forward: 0,
+          backward: 0,
+          left: 0,
+          right: 0,
+        });
       });
     })();
 
@@ -169,7 +170,7 @@ export default function NameScene({ name = process.env.NEXT_PUBLIC_DISPLAY_NAME 
               <Ground />
               <Trees />
               <Rocks />
-              <Car />
+              <Car joystickState={joystickState} />
               <Billboard position={[0, 2.2, 6]} />
               <TextBoxes boxes={[
                 { text: "W", position: [5, 0, 7] },

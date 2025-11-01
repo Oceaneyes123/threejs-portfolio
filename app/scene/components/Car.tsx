@@ -3,7 +3,7 @@ import { useRef, useEffect, useState, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
 import { RigidBody } from "@react-three/rapier";
 
-function Car() {
+function Car({ joystickState }: { joystickState?: { forward: number; backward: number; left: number; right: number } }) {
   const { scene } = useGLTF("/assets/car3.glb");
   const carRef = useRef<any>(null);
 
@@ -88,6 +88,11 @@ function Car() {
         if (Math.sign(steering.current) !== sign) steering.current = 0;
       } else steering.current = 0;
     }
+
+    // Add joystick steering
+    steering.current = Math.max(-maxSteer, Math.min(maxSteer, steering.current + (joystickState?.right ?? 0) * steerSpeed * delta * 10));
+    steering.current = Math.max(-maxSteer, Math.min(maxSteer, steering.current - (joystickState?.left ?? 0) * steerSpeed * delta * 10));
+
     setFrontSteer(steering.current);
 
     // accel / brake / friction
@@ -101,6 +106,10 @@ function Car() {
       if (Math.abs(velocity.current) > 0.1) accel -= Math.sign(velocity.current) * friction;
       else velocity.current = 0;
     }
+
+    // Add joystick acceleration
+    accel += (joystickState?.forward ?? 0) * acceleration;
+    accel -= (joystickState?.backward ?? 0) * acceleration * 0.7;
 
     velocity.current += accel * delta;
     velocity.current = Math.max(Math.min(velocity.current, maxSpeed), -maxSpeed * 0.5);
