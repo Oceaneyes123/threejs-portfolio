@@ -28,7 +28,7 @@ function Letters3D({ name }: { name: string }) {
             colliders="hull"
             restitution={0.3}
             friction={0.8}
-            mass={2.5}
+            mass={5}
             position={[idx * spacing, 0, 0]}
             rotation={[0, jitter[idx].ry, jitter[idx].rz]}
             linearDamping={0.5}

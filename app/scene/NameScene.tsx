@@ -1,9 +1,9 @@
 "use client";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Environment, SoftShadows, KeyboardControls } from "@react-three/drei";
 import type { KeyboardControlsEntry } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
-import { Suspense, useMemo, useEffect } from "react";
+import { Suspense, useMemo, useEffect, useRef, useState } from "react";
 import Ground from "./components/Ground";
 import Lights from "./components/Lights";
 import Letters3D from "./components/Letters3D";
@@ -28,15 +28,16 @@ const joystickState = {
 };
 
 export default function NameScene({ name = process.env.NEXT_PUBLIC_DISPLAY_NAME || "JEZREL DAVE" }: Props) {
-  const keyboardMap = useMemo<KeyboardControlsEntry<Controls>[]>(
-    () => [
+  const keyboardMap = useMemo<KeyboardControlsEntry<Controls>[]>
+    (() => [
       { name: "forward", keys: ["ArrowUp", "KeyW"] },
       { name: "backward", keys: ["ArrowDown", "KeyS"] },
       { name: "left", keys: ["ArrowLeft", "KeyA"] },
       { name: "right", keys: ["ArrowRight", "KeyD"] },
     ],
-    []
-  );
+    [])
+
+  const [animationComplete, setAnimationComplete] = useState(false);
 
   useEffect(() => {
     // Only enable joystick on mobile/touch devices
@@ -110,15 +111,54 @@ export default function NameScene({ name = process.env.NEXT_PUBLIC_DISPLAY_NAME 
     };
   }, []);
 
+  // Camera animation component
+  function CameraAnimation() {
+    const { camera } = useThree();
+    const animationRef = useRef({ progress: 0, enabled: true });
+
+    useFrame((state, delta) => {
+      if (!animationRef.current.enabled) return;
+
+      animationRef.current.progress += delta * 0.1; // Adjust speed here
+      const progress = Math.min(animationRef.current.progress, 1);
+
+      // Start position: top view [0, 20, 0]
+      // End position: [8, 5, 10]
+      const startPos = [0, 30, 0];
+      const endPos = [10, 5, 10];
+
+      // Interpolate position
+      camera.position.x = startPos[0] + (endPos[0] - startPos[0]) * progress;
+      camera.position.y = startPos[1] + (endPos[1] - startPos[1]) * progress;
+      camera.position.z = startPos[2] + (endPos[2] - startPos[2]) * progress;
+
+      // Rotate camera around the scene during animation
+      const angle = progress * Math.PI * 3; // Rotate 3 times during animation
+      camera.position.x = Math.cos(angle) * 15 * (1 - progress) + endPos[0] * progress;
+      camera.position.z = Math.sin(angle) * 15 * (1 - progress) + endPos[2] * progress;
+
+      // Look at the center
+      camera.lookAt(0, 0, 0);
+
+      if (progress >= 1) {
+        setAnimationComplete(true);
+        animationRef.current.enabled = false;
+      }
+    });
+
+    return null;
+  }
+
   return (
     <div style={{ width: "100%", height: "100dvh", background: "linear-gradient(180deg,#ff9255 0%,#ffb884 100%)" }}>
-  <KeyboardControls map={keyboardMap}>
-        <Canvas shadows camera={{ position: [8, 5, 10], fov: 50 }}>
+      <KeyboardControls map={keyboardMap}>
+        <Canvas shadows camera={{ fov: 50 }}>
           <color attach="background" args={["#ffb884"]} />
           <SoftShadows size={42} samples={16} focus={0.8} />
+          <CameraAnimation />
           <Lights />
           <Suspense fallback={null}>
-            <Physics gravity={[0, -9.81, 0]}>
+            <Physics gravity={[0, -10, 0]}>
               <Letters3D name={name} />
               <Ground />
               <Trees />
@@ -127,7 +167,7 @@ export default function NameScene({ name = process.env.NEXT_PUBLIC_DISPLAY_NAME 
             </Physics>
             <Environment preset="sunset" />
           </Suspense>
-          <OrbitControls enablePan={false} minDistance={4} maxDistance={30} maxPolarAngle={Math.PI / 2.1} />
+          <OrbitControls enablePan={false} minDistance={4} maxDistance={30} maxPolarAngle={Math.PI / 2.1} enabled={animationComplete} />
         </Canvas>
       </KeyboardControls>
     </div>
