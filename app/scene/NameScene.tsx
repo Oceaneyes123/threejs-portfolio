@@ -10,6 +10,7 @@ import Letters3D from "./components/Letters3D";
 import Trees from "./components/Trees";
 import Rocks from "./components/Rocks";
 import Car from "./components/Car";
+import Billboard from "./components/Billboard";
 
 // Joystick library will be loaded dynamically on mobile inside useEffect
 
@@ -168,6 +169,7 @@ export default function NameScene({ name = process.env.NEXT_PUBLIC_DISPLAY_NAME 
               <Trees />
               <Rocks />
               <Car />
+              <Billboard position={[0, 2.2, 6]} />
             </Physics>
             <Environment preset="sunset" />
           </Suspense>
