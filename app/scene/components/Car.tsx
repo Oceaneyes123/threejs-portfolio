@@ -7,46 +7,31 @@ function Car() {
   const { scene } = useGLTF("/assets/car3.glb");
   const carRef = useRef<any>(null);
 
-  // Helper to find wheels in the GLTF scene (must be above useEffect and useFrame)
-  const getWheelMeshes = useCallback((): {
-    frontLeft: any;
-    frontRight: any;
-    rearLeft: any;
-    rearRight: any;
-  } => {
+  const getWheelMeshes = useCallback(() => {
     if (!scene) return { frontLeft: null, frontRight: null, rearLeft: null, rearRight: null };
-    // Try to find by name (adjust as needed for your model)
     const frontLeft = scene.getObjectByName("wheel_fl") || scene.getObjectByName("Wheel_FL");
     const frontRight = scene.getObjectByName("wheel_fr") || scene.getObjectByName("Wheel_FR");
     const rearLeft = scene.getObjectByName("wheel_rl") || scene.getObjectByName("Wheel_RL");
     const rearRight = scene.getObjectByName("wheel_rr") || scene.getObjectByName("Wheel_RR");
     return { frontLeft, frontRight, rearLeft, rearRight };
   }, [scene]);
-  const [input, setInput] = useState({
-    forward: false,
-    backward: false,
-    left: false,
-    right: false,
-    brake: false,
-  });
-  // Car state
+
+  const [input, setInput] = useState({ forward: false, backward: false, left: false, right: false, brake: false });
   const velocity = useRef(0);
-  const steering = useRef(0);
-  const maxSteer = Math.PI;
+  const steering = useRef(0); // wheel angle (-maxSteer..+maxSteer)
+  const maxSteer = Math.PI / 4; // 45deg
+  const steerSpeed = 3.5;
+  const steerCenteringSpeed = 6.0;
   const maxSpeed = 12;
   const acceleration = 18;
   const brakeDecel = 30;
   const friction = 6;
-  const bounds = {
-    minX: -30,
-    maxX: 30,
-    minZ: -30,
-    maxZ: 30,
-  };
-  // Wheel visual state
+  const turnSpeed = 2.6; // yaw responsiveness multiplier
+
+  const bounds = { minX: -30, maxX: 30, minZ: -30, maxZ: 30 };
   const [wheelRotation, setWheelRotation] = useState(0);
   const [frontSteer, setFrontSteer] = useState(0);
-  // Keyboard events
+
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.repeat) return;
@@ -77,69 +62,89 @@ function Car() {
     };
   }, []);
 
-  // Car movement and wheel animation
+  // helper: quaternion -> yaw (rotation about Y)
+  const quatToYaw = (q: { x: number; y: number; z: number; w: number }) => {
+    const { x, y, z, w } = q;
+    // yaw (Y) = atan2(2*(w*y + x*z), 1 - 2*(y*y + z*z))
+    return Math.atan2(2 * (w * y + x * z), 1 - 2 * (y * y + z * z));
+  };
+
   useFrame((_, delta) => {
     const car = carRef.current;
     if (!car) return;
-    // Get current transform
-    const pos = car.translation();
-    const rot = car.rotation();
-    // Update steering
-    if (input.left) steering.current = Math.min(steering.current + delta * 2, maxSteer);
-    else if (input.right) steering.current = Math.max(steering.current - delta * 2, -maxSteer);
-    else steering.current *= 0.85;
+
+    const pos = car.translation(); // {x,y,z}
+    const rot = car.rotation(); // quaternion {x,y,z,w}
+    let yaw = quatToYaw(rot);
+
+    // Steering input: left -> positive steer, right -> negative steer
+    if (input.left) steering.current = Math.min(steering.current + steerSpeed * delta, maxSteer);
+    else if (input.right) steering.current = Math.max(steering.current - steerSpeed * delta, -maxSteer);
+    else {
+      // center steering smoothly
+      if (Math.abs(steering.current) > 0.001) {
+        const sign = Math.sign(steering.current);
+        steering.current -= sign * steerCenteringSpeed * delta;
+        if (Math.sign(steering.current) !== sign) steering.current = 0;
+      } else steering.current = 0;
+    }
     setFrontSteer(steering.current);
-    // Acceleration/brake
+
+    // accel / brake / friction
     let accel = 0;
     if (input.forward) accel += acceleration;
     if (input.backward) accel -= acceleration * 0.7;
     if (input.brake) {
-      if (Math.abs(velocity.current) > 0.1) {
-        accel -= Math.sign(velocity.current) * brakeDecel;
-      }
+      if (Math.abs(velocity.current) > 0.1) accel -= Math.sign(velocity.current) * brakeDecel;
     }
-    // Friction
-    if (!input.forward && !input.backward) {
-      if (Math.abs(velocity.current) > 0.1) {
-        accel -= Math.sign(velocity.current) * friction;
-      } else {
-        velocity.current = 0;
-      }
+    if (!input.forward && !input.backward && !input.brake) {
+      if (Math.abs(velocity.current) > 0.1) accel -= Math.sign(velocity.current) * friction;
+      else velocity.current = 0;
     }
-    // Update velocity
+
     velocity.current += accel * delta;
     velocity.current = Math.max(Math.min(velocity.current, maxSpeed), -maxSpeed * 0.5);
-    // Move car
-    let angle = rot.y || 0;
-    if (Math.abs(velocity.current) > 0.01) {
-      angle += steering.current * (velocity.current >= 0 ? 1 : -1) * delta * 2.0;
-    }
-    // Calculate new position
-    let dx = Math.sin(angle) * velocity.current * delta;
-    let dz = Math.cos(angle) * velocity.current * delta;
+
+    // turning: compute factor so there's still some turning at low/zero speed (allows 360°)
+    const effectiveSpeed = Math.max(Math.abs(velocity.current), 0.4); // lower bound so you can rotate when stopped
+    const speedFactor = effectiveSpeed / maxSpeed; // 0.033..1
+    // if going backward, turning direction often reverses; use sign of velocity
+    const velocitySign = velocity.current === 0 ? 1 : Math.sign(velocity.current);
+    const yawDelta = steering.current * velocitySign * speedFactor * turnSpeed * delta;
+    yaw += yawDelta;
+
+    // move forward by yaw
+    const dx = Math.sin(yaw) * velocity.current * delta;
+    const dz = Math.cos(yaw) * velocity.current * delta;
     let newX = pos.x + dx;
     let newZ = pos.z + dz;
-    // Clamp to bounds
     newX = Math.max(bounds.minX, Math.min(bounds.maxX, newX));
     newZ = Math.max(bounds.minZ, Math.min(bounds.maxZ, newZ));
-    // Prevent leaving plane (y)
     const newY = 0;
-    // Set transform
+
+    // quaternion from yaw
+    const half = yaw / 2;
+    const qx = 0;
+    const qy = Math.sin(half);
+    const qz = 0;
+    const qw = Math.cos(half);
+
     car.setNextKinematicTranslation({ x: newX, y: newY, z: newZ });
-    car.setNextKinematicRotation({ x: 0, y: angle, z: 0, w: 1 });
-    // Animate wheels
+    car.setNextKinematicRotation({ x: qx, y: qy, z: qz, w: qw });
+
     setWheelRotation((r) => r + velocity.current * delta * 2.5);
   });
 
-  // Apply wheel visual rotation
   useEffect(() => {
     const { frontLeft, frontRight, rearLeft, rearRight } = getWheelMeshes();
+    // flip visual steer depending on model orientation; adjust sign if it looks inverted
+    const steerVisual = frontSteer;
     if (frontLeft) {
-      frontLeft.rotation.y = frontSteer;
+      frontLeft.rotation.y = steerVisual;
       frontLeft.rotation.x = wheelRotation;
     }
     if (frontRight) {
-      frontRight.rotation.y = frontSteer;
+      frontRight.rotation.y = steerVisual;
       frontRight.rotation.x = wheelRotation;
     }
     if (rearLeft) rearLeft.rotation.x = wheelRotation;
